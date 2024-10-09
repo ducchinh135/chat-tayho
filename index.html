@@ -282,11 +282,42 @@
           const settingsText = ref("");
           const isFirstMessage = ref(true); // Biến cờ để theo dõi tin nhắn đầu tiên
           const isTyping = ref(false); // Trạng thái gõ chữ
+          const conversationId = ref("");
+          const parentMessageId = ref("");
 
           const messageClasses = (role) => ({
             "text-right justify-end": role === "user",
             "text-left justify-start": role === "assistant",
           });
+
+          // Phương thức tạo cuộc trò chuyện
+          async function createConversation() {
+            try {
+              const response = await fetch(
+                "https://dify.phoenixtech.vn/v1/conversations/name",
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    name: "",
+                    user: "Dify",
+                  }),
+                }
+              );
+
+              const data = await response.json();
+              conversationId.value = data.id; // Lưu conversation_id
+              console.log(
+                "Created conversation with ID:",
+                conversationId.value
+              );
+            } catch (error) {
+              console.error("Error creating conversation:", error);
+            }
+          }
 
           async function sendMessage() {
             if (!userInput.value.trim()) return;
@@ -301,6 +332,11 @@
                 content: contentInput,
               });
 
+              //   Kiểm tra nếu đây là tin nhắn đầu tiên thì tạo cuộc trò chuyện
+              // if (!conversationId.value) {
+              //   await createConversation(); // Tạo cuộc trò chuyện mới
+              // }
+
               // Add an initial message for the assistant
               const allMessages = [
                 ...messages.value.map((msg) => ({
@@ -309,16 +345,18 @@
                 })),
               ];
 
+              // Gửi tin nhắn sau khi đã tạo cuộc trò chuyện
               const data = {
                 inputs: {}, // Chỉnh sửa nếu cần thiết cho các biến khác
                 query: contentInput, // Nội dung tin nhắn từ người dùng
                 response_mode: "streaming",
-                conversation_id: "",
+                conversation_id: conversationId.value || "",
+                parent_message_id: parentMessageId.value || "",
                 user: "Dify", // Bạn có thể thay đổi giá trị này
               };
 
               const response = await fetch(
-                "https://dify.phoenixtech.vn/v1/chat-messages",
+                "https://dify.phoenixtech.vn/api/chat-messages",
                 {
                   method: "POST",
                   headers: {
@@ -329,13 +367,13 @@
                 }
               );
 
-              console.log(response);
-
               userInput.value = "";
 
               const reader = response.body.getReader();
               const decoder = new TextDecoder();
               let result = "";
+
+              console.log(reader);
 
               // Add an initial message for the assistant
               // Add an initial message for the assistant
@@ -421,6 +459,23 @@
 
                         default:
                           console.log("Unknown event type:", data.event);
+                      }
+                      // Lưu conversation_id nếu chưa có
+                      if (!conversationId.value && data.conversation_id) {
+                        conversationId.value = data.conversation_id;
+                        console.log(
+                          "Lưu conversation_id:",
+                          conversationId.value
+                        );
+                      }
+
+                      // Lưu message_id để sử dụng cho parent_message_id ở tin nhắn tiếp theo
+                      if (data.message_id) {
+                        parentMessageId.value = data.message_id;
+                        console.log(
+                          "Cập nhật parentMessageId:",
+                          parentMessageId.value
+                        );
                       }
                     } catch (error) {
                       console.error("Error parsing JSON chunk", error);
